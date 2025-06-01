@@ -1,0 +1,183 @@
+const std = @import("std");
+
+const Allocator = std.mem.Allocator;
+
+const LogLevel = enum {
+    Debug,
+    Info,
+    Warning,
+    Error,
+    Critical,
+};
+
+const LogEntry = struct {
+    level: LogLevel,
+    message: []const u8,
+};
+
+const Logger = struct {
+    // 3 桁ゼロ埋め
+    id: [3]u8,
+    // ログメッセージ
+    message: []const u8,
+    level: LogLevel,
+};
+
+const LoggerAllocator = struct {
+    // ロガーのインスタンスを生成する
+    pub fn create(id: [3]u8, message: []const u8, level: LogLevel) Logger {
+        return Logger{
+            .id = id,
+            .message = message,
+            .level = level,
+        };
+    }
+};
+
+pub fn Json() type {
+    return struct {
+        allocator: Allocator,
+
+        const Self = @This();
+
+        pub fn init(allocator: Allocator) Self {
+            return Self{ .allocator = allocator };
+        }
+
+        pub fn createLogger(id: [3]u8, message: []const u8, level: LogLevel) !Logger {
+            // ロガーのインスタンスを生成
+            return LoggerAllocator.create(id, message, level);
+        }
+        pub fn createLoggerFromEntry(entry: LogEntry) !Logger {
+            // LogEntryからロガーのインスタンスを生成
+            var id_buf: [3]u8 = undefined;
+            _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{0}) catch unreachable; // 仮のID
+            return LoggerAllocator.create(id_buf, entry.message, entry.level);
+        }
+
+        // JSON出力用の関数
+        pub fn to(self: Logger) ![]u8 {
+            var buf: [256]u8 = undefined;
+            const len = try std.fmt.bufPrint(&buf, "{{\"id\":\"{s}\",\"level\":\"{s}\",\"message\":\"{s}\"}}", .{
+                &self.id,
+                switch (self.level) {
+                    LogLevel.Debug => "Debug",
+                    LogLevel.Info => "Info",
+                    LogLevel.Warning => "Warning",
+                    LogLevel.Error => "Error",
+                    LogLevel.Critical => "Critical",
+                },
+                self.message,
+            });
+            return buf[0..len];
+        }
+    };
+}
+
+// Pythonのlogger呼び出しからLoggerインスタンスを生成しJSON出力するユーティリティ
+pub fn loggersToJson(logs: []const LogEntry, allocator: std.mem.Allocator) ![]u8 {
+    var list = std.ArrayList(u8).init(allocator);
+    defer list.deinit();
+    try list.append('[');
+    var id_num: u16 = 0;
+    var first = true;
+    for (logs) |log| {
+        if (first) {
+            try list.appendSlice("\n");
+        } else {
+            try list.appendSlice(",\n");
+        }
+        first = false;
+        var id_buf: [3]u8 = undefined;
+        _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{id_num}) catch unreachable;
+        id_num += 1;
+        const level_str = switch (log.level) {
+            LogLevel.Debug => "Debug",
+            LogLevel.Info => "Info",
+            LogLevel.Warning => "Warning",
+            LogLevel.Error => "Error",
+            LogLevel.Critical => "Critical",
+        };
+        try list.writer().print("    {{\"id\":\"{s}\",\"level\":\"{s}\",\"message\":\"{s}\"}}", .{ &id_buf, level_str, log.message });
+    }
+    try list.appendSlice("\n]");
+    return list.toOwnedSlice();
+}
+
+pub fn main() !void {
+    const allocator = std.heap.page_allocator;
+    var args = std.process.args();
+    _ = args.next(); // skip program name
+    const pyfile = args.next() orelse {
+        std.debug.print("Usage: zig run logger.zig <pythonfile>\n", .{});
+        return;
+    };
+    // Pythonファイルを読み込む
+    var file = try std.fs.cwd().openFile(pyfile, .{});
+    defer file.close();
+    const source = try file.readToEndAlloc(allocator, 10 * 1024 * 1024); // 最大10MB
+    defer allocator.free(source);
+
+    // logger.<level>("message") を抽出
+    var logs = std.ArrayList(LogEntry).init(allocator);
+    defer logs.deinit();
+    var it = std.mem.tokenizeAny(u8, source, "\n");
+    while (it.next()) |line| {
+        // 探索: logger.<level>("message")
+        const levels = [_][]const u8{ "debug", "info", "warning", "error", "critical" };
+        var idx: usize = 0;
+        while (idx < levels.len) : (idx += 1) {
+            const lvl = levels[idx];
+            const prefix = try std.fmt.allocPrint(allocator, "logger.{s}(\"", .{lvl});
+            defer allocator.free(prefix);
+            if (std.mem.indexOf(u8, line, prefix)) |start| {
+                const msg_start = start + prefix.len;
+                if (std.mem.indexOfScalar(u8, line[msg_start..], '"')) |msg_end| {
+                    const msg = line[msg_start .. msg_start + msg_end];
+                    const level_enum = switch (idx) {
+                        0 => LogLevel.Debug,
+                        1 => LogLevel.Info,
+                        2 => LogLevel.Warning,
+                        3 => LogLevel.Error,
+                        4 => LogLevel.Critical,
+                        else => LogLevel.Info,
+                    };
+                    try logs.append(.{ .level = level_enum, .message = msg });
+                }
+            }
+        }
+    }
+    const json = try loggersToJson(logs.items, allocator);
+    defer allocator.free(json);
+    // ファイルに出力（従来の配列JSON）
+    var out_file = try std.fs.cwd().createFile("logger_output.json", .{ .truncate = true });
+    defer out_file.close();
+    try out_file.writeAll(json);
+
+    // level+message→id のdict形式JSONも出力
+    // ここで格納したいレベルのみを指定
+    const allowed_levels = [_]LogLevel{ LogLevel.Error, LogLevel.Critical }; // 例: ErrorとCriticalのみ
+    var dict_list = std.ArrayList(u8).init(allocator);
+    defer dict_list.deinit();
+    try dict_list.append('{');
+    var dict_first = true;
+    var dict_id_num: u16 = 0;
+    for (logs.items) |log| {
+        // allowed_levelsに含まれるレベルのみ格納
+        var allowed = false;
+        for (allowed_levels) |al| {
+            if (log.level == al) allowed = true;
+        }
+        if (!allowed) continue;
+        if (!dict_first) try dict_list.appendSlice(",\n");
+        dict_first = false;
+        var id_buf: [3]u8 = undefined;
+        _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{dict_id_num}) catch unreachable;
+        dict_id_num += 1;
+        try dict_list.writer().print("    \"{s}\": \"{s}\"", .{ log.message, &id_buf });
+    }
+    try dict_list.appendSlice("\n}\n");
+    var dict_file = try std.fs.cwd().createFile("logger_output_dict.json", .{ .truncate = true });
+    defer dict_file.close();
+    try dict_file.writeAll(dict_list.items);
+}
