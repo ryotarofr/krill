@@ -1,0 +1,24 @@
+{
+  "SKIC05008E004": {
+    "001": {
+      "level": "Info",
+      "message": "ログテスト"
+    },
+    "002": {
+      "level": "Debug",
+      "message": "デバッグメッセージ"
+    },
+    "003": {
+      "level": "Warning",
+      "message": "警告メッセージ"
+    },
+    "004": {
+      "level": "Error",
+      "message": "エラーメッセージ"
+    },
+    "005": {
+      "level": "Critical",
+      "message": "クリティカルメッセージ"
+    }
+  }
+}

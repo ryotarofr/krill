@@ -17,7 +17,7 @@ const LogEntry = struct {
 
 const Logger = struct {
     // 3 桁ゼロ埋め
-    id: [3]u8,
+    id: [3]u8 = 0,
     // ログメッセージ
     message: []const u8,
     level: LogLevel,
@@ -34,45 +34,62 @@ const LoggerAllocator = struct {
     }
 };
 
-pub fn Json() type {
-    return struct {
-        allocator: Allocator,
+const Json = struct {
+    allocator: Allocator,
+    logs: []const LogEntry,
 
-        const Self = @This();
+    pub fn init(allocator: Allocator, logs: []const LogEntry) Json {
+        return Json{ .allocator = allocator, .logs = logs };
+    }
 
-        pub fn init(allocator: Allocator) Self {
-            return Self{ .allocator = allocator };
-        }
+    fn logLevelToString(level: LogLevel) []const u8 {
+        return switch (level) {
+            LogLevel.Debug => "Debug",
+            LogLevel.Info => "Info",
+            LogLevel.Warning => "Warning",
+            LogLevel.Error => "Error",
+            LogLevel.Critical => "Critical",
+        };
+    }
+    fn write(writer: anytype, id: []const u8, level: []const u8, message: []const u8) !void {
+        try writer.print("{{\"id\":\"{s}\",\"level\":\"{s}\",\"message\":\"{s}\"}}", .{ id, level, message });
+    }
 
-        pub fn createLogger(id: [3]u8, message: []const u8, level: LogLevel) !Logger {
-            // ロガーのインスタンスを生成
-            return LoggerAllocator.create(id, message, level);
-        }
-        pub fn createLoggerFromEntry(entry: LogEntry) !Logger {
-            // LogEntryからロガーのインスタンスを生成
+    // JSON出力用の関数
+    pub fn to(logger: Logger) void {
+        var buf: [3]u8 = undefined;
+        _ = std.fmt.bufPrint(&buf, "{{\"id\":\"{s}\",\"level\":\"{s}\",\"message\":\"{s}\"}}", .{
+            &logger.id,
+            logLevelToString(logger.level),
+            logger.message,
+        }) catch unreachable;
+        // return buf[0..len];
+    }
+
+    pub fn logsToJson(self: *Json, root_id: []const u8) ![]u8 {
+        var list = std.ArrayList(u8).init(self.allocator);
+        defer list.deinit();
+        try list.append('{');
+        try list.writer().print("\n  \"{s}\": {{\n", .{root_id});
+        var id_num: u16 = 1;
+        var first = true;
+        for (self.logs) |log| {
+            if (!first) {
+                try list.appendSlice(",\n");
+            }
+            first = false;
             var id_buf: [3]u8 = undefined;
-            _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{0}) catch unreachable; // 仮のID
-            return LoggerAllocator.create(id_buf, entry.message, entry.level);
+            _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{id_num}) catch unreachable;
+            id_num += 1;
+            const level_str = logLevelToString(log.level);
+            try list.writer().print("    \"{s}\": {{\n      \"level\": \"{s}\",\n      \"message\": \"{s}\"\n    }}", .{ &id_buf, level_str, log.message });
         }
+        try list.appendSlice("\n  }\n}");
+        return list.toOwnedSlice();
+    }
+};
 
-        // JSON出力用の関数
-        pub fn to(self: Logger) ![]u8 {
-            var buf: [256]u8 = undefined;
-            const len = try std.fmt.bufPrint(&buf, "{{\"id\":\"{s}\",\"level\":\"{s}\",\"message\":\"{s}\"}}", .{
-                &self.id,
-                switch (self.level) {
-                    LogLevel.Debug => "Debug",
-                    LogLevel.Info => "Info",
-                    LogLevel.Warning => "Warning",
-                    LogLevel.Error => "Error",
-                    LogLevel.Critical => "Critical",
-                },
-                self.message,
-            });
-            return buf[0..len];
-        }
-    };
-}
+const TargetLogLevel = []const LogLevel; // 出力するログレベルを指定
 
 // Pythonのlogger呼び出しからLoggerインスタンスを生成しJSON出力するユーティリティ
 pub fn loggersToJson(logs: []const LogEntry, allocator: std.mem.Allocator) ![]u8 {
@@ -147,7 +164,9 @@ pub fn main() !void {
             }
         }
     }
-    const json = try loggersToJson(logs.items, allocator);
+    // const json = try Json.logsToJson(logs.items, allocator);
+    var json_instance = Json.init(allocator, logs.items);
+    const json = try json_instance.logsToJson("SKIC05008E004"); // TODO prefix に該当するもの。ユーザ側でパラメータを渡せるようにする
     defer allocator.free(json);
     // ファイルに出力（従来の配列JSON）
     var out_file = try std.fs.cwd().createFile("logger_output.json", .{ .truncate = true });
