@@ -47,15 +47,18 @@ pub fn build(b: *std.Build) void {
     // Now, we will create a static library based on the module we created above.
     // This creates a `std.Build.Step.Compile`, which is the build step responsible
     // for actually invoking the compiler.
-    const lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "logger",
-        .root_module = lib_mod,
-    });
+    // const lib = b.addLibrary(.{
+    //     .linkage = .static,
+    //     .name = "logger",
+    //     .root_module = lib_mod,
+    // });
 
-    // This declares intent for the library to be installed into the standard
-    // location when the user invokes the "install" step (the default step when
-    // running `zig build`).
+    const lib = b.addSharedLibrary(.{
+        .name = "logger",
+        .root_source_file = b.path("src/json.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     b.installArtifact(lib);
 
     // This creates another `std.Build.Step.Compile`, but this one builds an executable
