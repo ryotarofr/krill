@@ -91,34 +91,117 @@ const Json = struct {
 
 const TargetLogLevel = []const LogLevel; // 出力するログレベルを指定
 
-// Pythonのlogger呼び出しからLoggerインスタンスを生成しJSON出力するユーティリティ
-pub fn loggersToJson(logs: []const LogEntry, allocator: std.mem.Allocator) ![]u8 {
-    var list = std.ArrayList(u8).init(allocator);
-    defer list.deinit();
-    try list.append('[');
-    var id_num: u16 = 0;
-    var first = true;
-    for (logs) |log| {
-        if (first) {
-            try list.appendSlice("\n");
-        } else {
-            try list.appendSlice(",\n");
+// pub fn Entry(comptime T: type) type {
+//     return struct {
+//         id: [3]u8,
+//         message: []const u8,
+//         level: LogLevel,
+
+//         pub fn init(id: [3]u8, message: []const u8, level: LogLevel) Entry(T) {
+//             return Entry(T){
+//                 .id = id,
+//                 .message = message,
+//                 .level = level,
+//             };
+//         }
+//     };
+// }
+
+export fn run_logger(pyfile_ptr: [*]const u8, pyfile_len: usize) void {
+    const allocator = std.heap.page_allocator;
+    const pyfile = pyfile_ptr[0..pyfile_len];
+
+    var file = std.fs.cwd().openFile(pyfile, .{}) catch {
+        return;
+    };
+    defer file.close();
+    const source = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch {
+        return;
+    };
+    defer allocator.free(source);
+
+    var logs = std.ArrayList(LogEntry).init(allocator);
+    defer logs.deinit();
+    var it = std.mem.tokenizeAny(u8, source, "\n");
+    while (it.next()) |line| {
+        const levels = [_][]const u8{ "debug", "info", "warning", "error", "critical" };
+        var idx: usize = 0;
+        while (idx < levels.len) : (idx += 1) {
+            const lvl = levels[idx];
+            const prefix = std.fmt.allocPrint(allocator, "logger.{s}(\"", .{lvl}) catch {
+                return;
+            };
+            defer allocator.free(prefix);
+            if (std.mem.indexOf(u8, line, prefix)) |start| {
+                const msg_start = start + prefix.len;
+                if (std.mem.indexOfScalar(u8, line[msg_start..], '"')) |msg_end| {
+                    const msg = line[msg_start .. msg_start + msg_end];
+                    const level_enum = switch (idx) {
+                        0 => LogLevel.Debug,
+                        1 => LogLevel.Info,
+                        2 => LogLevel.Warning,
+                        3 => LogLevel.Error,
+                        4 => LogLevel.Critical,
+                        else => LogLevel.Info,
+                    };
+                    logs.append(.{ .level = level_enum, .message = msg }) catch {
+                        return;
+                    };
+                }
+            }
         }
-        first = false;
-        var id_buf: [3]u8 = undefined;
-        _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{id_num}) catch unreachable;
-        id_num += 1;
-        const level_str = switch (log.level) {
-            LogLevel.Debug => "Debug",
-            LogLevel.Info => "Info",
-            LogLevel.Warning => "Warning",
-            LogLevel.Error => "Error",
-            LogLevel.Critical => "Critical",
-        };
-        try list.writer().print("    {{\"id\":\"{s}\",\"level\":\"{s}\",\"message\":\"{s}\"}}", .{ &id_buf, level_str, log.message });
     }
-    try list.appendSlice("\n]");
-    return list.toOwnedSlice();
+    var json_instance = Json.init(allocator, logs.items);
+    const json = json_instance.logsToJson("SKIC05008E004") catch {
+        return;
+    };
+    defer allocator.free(json);
+    var out_file = std.fs.cwd().createFile("logger_output.json", .{ .truncate = true }) catch {
+        return;
+    };
+    defer out_file.close();
+    out_file.writeAll(json) catch {
+        return;
+    };
+
+    // level+message→id のdict形式JSONも出力
+    const allowed_levels = [_]LogLevel{ LogLevel.Error, LogLevel.Critical }; // 例: ErrorとCriticalのみ
+    var dict_list = std.ArrayList(u8).init(allocator);
+    defer dict_list.deinit();
+    dict_list.append('{') catch {
+        return;
+    };
+    var dict_first = true;
+    var dict_id_num: u16 = 0;
+    for (logs.items) |log| {
+        var allowed = false;
+        for (allowed_levels) |al| {
+            if (log.level == al) allowed = true;
+        }
+        if (!allowed) continue;
+        if (!dict_first) dict_list.appendSlice(",\n") catch {
+            return;
+        };
+        dict_first = false;
+        var id_buf: [3]u8 = undefined;
+        _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{dict_id_num}) catch {
+            return;
+        };
+        dict_id_num += 1;
+        dict_list.writer().print("    \"{s}\": \"{s}\"", .{ log.message, &id_buf }) catch {
+            return;
+        };
+    }
+    dict_list.appendSlice("\n}\n") catch {
+        return;
+    };
+    var dict_file = std.fs.cwd().createFile("logger_output_dict.json", .{ .truncate = true }) catch {
+        return;
+    };
+    defer dict_file.close();
+    dict_file.writeAll(dict_list.items) catch {
+        return;
+    };
 }
 
 pub fn main() !void {
