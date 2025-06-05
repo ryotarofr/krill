@@ -18,10 +18,8 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     return logger
 
 logger = setup_logger('my_logger')
-
-id1 = logger.info("ログテスト")
-print(f"Logger ID: {id1}")
-logger.debug("デバッグメッセージ")
-logger.warning("警告メッセージ")
-logger.error("エラーメッセージ")
-logger.critical("クリティカルメッセージ")
+logger.debug("debug message")
+logger.info("info message")
+logger.warning("warning message")
+logger.error("error message")
+logger.critical("critical message")
