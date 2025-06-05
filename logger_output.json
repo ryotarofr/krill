@@ -1,24 +1,24 @@
 {
-  "SKIC05008E004": {
+  "API_ROOT": {
     "001": {
-      "level": "Info",
-      "message": "ログテスト"
+      "level": "Debug",
+      "message": "debug message"
     },
     "002": {
-      "level": "Debug",
-      "message": "デバッグメッセージ"
+      "level": "Info",
+      "message": "info message"
     },
     "003": {
       "level": "Warning",
-      "message": "警告メッセージ"
+      "message": "warning message"
     },
     "004": {
       "level": "Error",
-      "message": "エラーメッセージ"
+      "message": "error message"
     },
     "005": {
       "level": "Critical",
-      "message": "クリティカルメッセージ"
+      "message": "critical message"
     }
   }
 }
