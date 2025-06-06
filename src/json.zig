@@ -12,14 +12,6 @@ const LogLevel = enum {
 };
 
 const LogEntry = struct {
-    level: LogLevel,
-    message: []const u8,
-};
-
-const Logger = struct {
-    /// Currently, three zeros are added to the end of numbers.
-    /// It is necessary to allow users to configure this setting.
-    id: [3]u8 = 0,
     /// The message is the log message.
     /// `logger.debug("debug message")` will be stored as `debug message`.
     /// `logger.info("info message")` will be stored as `info message`.
@@ -36,12 +28,21 @@ const Logger = struct {
     level: LogLevel,
 };
 
+const Logger = struct {
+    /// Currently, three zeros are added to the end of numbers.
+    /// It is necessary to allow users to configure this setting.
+    id: [3]u8 = 0,
+    entry: LogEntry,
+};
+
 const LoggerAllocator = struct {
     pub fn create(id: [3]u8, message: []const u8, level: LogLevel) Logger {
         return Logger{
             .id = id,
-            .message = message,
-            .level = level,
+            .entry = LogEntry{
+                .message = message,
+                .level = level,
+            },
         };
     }
 };
@@ -119,54 +120,47 @@ fn tokenIter(source: []const u8) !std.mem.TokenIterator(u8, .any) {
     return std.mem.tokenizeAny(u8, source, "\n");
 }
 
-pub fn Entry() type {
-    return struct {
-        pyfile_ptr: [*]const u8,
-        pyfile_len: usize,
-        root_id: []const u8,
-        output_path: []const u8,
-        allocator: Allocator,
+pub const EntryType = struct {
+    pyfile_ptr: [*]const u8,
+    pyfile_len: usize,
+    root_id: []const u8,
+    output_path: []const u8,
+    allocator: Allocator,
 
-        const Self = @This();
-
-        pub fn pyfile(self: Self) []const u8 {
-            return self.pyfile_ptr[0..self.pyfile_len];
-        }
-
-        pub fn openFile(self: Self) !std.fs.File {
-            return std.fs.cwd().openFile(self.pyfile(), .{});
-        }
-
-        pub fn readToEndAlloc(self: Self, max_size: usize) ![]const u8 {
-            var file = try self.openFile();
-            defer file.close();
-            return try file.readToEndAlloc(self.allocator, max_size);
-        }
-
-        pub fn run(self: Self) !std.ArrayList(LogEntry) {
-            const source = try self.readToEndAlloc(10 * 1024 * 1024);
-            var logs = std.ArrayList(LogEntry).init(self.allocator);
-            var it = try tokenIter(source);
-            while (it.next()) |line| {
-                var idx: usize = 0;
-                while (idx < LEVELS.len) : (idx += 1) {
-                    const lvl = LEVELS[idx];
-                    const prefix = try std.fmt.allocPrint(self.allocator, "logger.{s}(\"", .{lvl});
-                    defer self.allocator.free(prefix);
-                    if (std.mem.indexOf(u8, line, prefix)) |start| {
-                        const msg_start = start + prefix.len;
-                        if (std.mem.indexOfScalar(u8, line[msg_start..], '"')) |msg_end| {
-                            const msg = line[msg_start .. msg_start + msg_end];
-                            const level_enum = logLevelFromIdx(idx);
-                            try logs.append(.{ .level = level_enum, .message = msg });
-                        }
+    pub fn pyfile(self: @This()) []const u8 {
+        return self.pyfile_ptr[0..self.pyfile_len];
+    }
+    pub fn openFile(self: @This()) !std.fs.File {
+        return std.fs.cwd().openFile(self.pyfile(), .{});
+    }
+    pub fn readToEndAlloc(self: @This(), max_size: usize) ![]const u8 {
+        var file = try self.openFile();
+        defer file.close();
+        return try file.readToEndAlloc(self.allocator, max_size);
+    }
+    pub fn run(self: @This()) !std.ArrayList(LogEntry) {
+        const source = try self.readToEndAlloc(10 * 1024 * 1024);
+        var logs = std.ArrayList(LogEntry).init(self.allocator);
+        var it = try tokenIter(source);
+        while (it.next()) |line| {
+            var idx: usize = 0;
+            while (idx < LEVELS.len) : (idx += 1) {
+                const lvl = LEVELS[idx];
+                const prefix = try std.fmt.allocPrint(self.allocator, "logger.{s}(\"", .{lvl});
+                defer self.allocator.free(prefix);
+                if (std.mem.indexOf(u8, line, prefix)) |start| {
+                    const msg_start = start + prefix.len;
+                    if (std.mem.indexOfScalar(u8, line[msg_start..], '"')) |msg_end| {
+                        const msg = line[msg_start .. msg_start + msg_end];
+                        const level_enum = logLevelFromIdx(idx);
+                        try logs.append(.{ .level = level_enum, .message = msg });
                     }
                 }
             }
-            return logs;
         }
-    };
-}
+        return logs;
+    }
+};
 
 pub fn LoggerZig() type {
     return struct {
@@ -183,7 +177,7 @@ pub fn LoggerZig() type {
         }
 
         pub fn run(self: Self) void {
-            const entry = Entry(){
+            var entry = EntryType{
                 .pyfile_ptr = self.pyfile_ptr,
                 .pyfile_len = self.pyfile_len,
                 .root_id = self.root_id,
@@ -203,33 +197,6 @@ pub fn LoggerZig() type {
             var out_file = self.createPile() catch return;
             defer out_file.close();
             out_file.writeAll(json) catch return;
-
-            // ここまでで一旦OK
-
-            // level+message→id のdict形式JSONも出力
-            // const allowed_levels: TargetLogLevel = [_]LogLevel{ LogLevel.Error, LogLevel.Critical };
-            // var dict_list = std.ArrayList(u8).init(self.allocator);
-            // defer dict_list.deinit();
-            // try dict_list.append('{');
-            // var dict_first = true;
-            // var dict_id_num: u16 = 0;
-            // for (logs) |log| {
-            //     var allowed = false;
-            //     for (allowed_levels) |al| {
-            //         if (log.level == al) allowed = true;
-            //     }
-            //     if (!allowed) continue;
-            //     if (!dict_first) try dict_list.appendSlice(",\n");
-            //     dict_first = false;
-            //     var id_buf: [3]u8 = undefined;
-            //     _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{dict_id_num}) catch unreachable;
-            //     dict_id_num += 1;
-            //     try dict_list.writer().print("    \"{s}\": \"{s}\"", .{ log.message, &id_buf });
-            // }
-            // try dict_list.appendSlice("\n}\n");
-            // var dict_file = try std.fs.cwd().createFile("logger_output_dict.json", .{ .truncate = true });
-            // defer dict_file.close();
-            // try dict_file.writeAll(dict_list.items);
         }
     };
 }
