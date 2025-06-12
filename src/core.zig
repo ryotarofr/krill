@@ -1,139 +1,109 @@
-///
-/// This is the content that is expected to be executed within the Python source.
-///
 const std = @import("std");
 const util = @import("util.zig");
 const Struct = @import("struct.zig");
 
-const Allocator = std.mem.Allocator;
-const LogLevel = Struct.LogLevel;
-const LogEntry = Struct.LogEntry;
-const Logger = Struct.Logger;
+/// A thread-unsafe logger allocator for Python integration.
+pub const LoggerAllocator = struct {
+    allocator: std.mem.Allocator,
+    map: std.AutoHashMap(i64, Struct.Logger),
+    next_id: i64,
 
-pub fn LoggerAllocator() type {
-    return struct {
-        allocator: Allocator,
-        map: std.AutoHashMap(i64, Logger),
+    /// Initialize a new LoggerAllocator.
+    pub fn init(allocator: std.mem.Allocator) LoggerAllocator {
+        return LoggerAllocator{
+            .allocator = allocator,
+            .map = std.AutoHashMap(i64, Struct.Logger).init(allocator),
+            .next_id = 1,
+        };
+    }
 
-        next_id: i64,
+    /// Generate the next numeric ID.
+    fn nextId(self: *LoggerAllocator) i64 {
+        const id = self.next_id;
+        self.next_id += 1;
+        return id;
+    }
 
-        const Self = @This();
+    /// Log a message at the given level. Allocates a copy of the message.
+    pub fn log(self: *LoggerAllocator, message: []const u8, level: Struct.LogLevel) !void {
+        const len = message.len;
+        const buf = try self.allocator.alloc(u8, len);
+        std.mem.copyForwards(u8, buf, message);
 
-        pub fn init(allocator: Allocator) Self {
-            return Self{ .allocator = allocator, .map = std.AutoHashMap(i64, Logger).init(allocator), .next_id = 1 };
+        const id = self.nextId();
+        const logger = Struct.Logger{
+            .id = util.toZeroPad3(id),
+            .entry = Struct.LogEntry{ .message = buf, .level = level },
+        };
+        _ = try self.map.put(id, logger);
+    }
+
+    /// Return the latest (highest-key) logger entry.
+    pub fn getLast(self: *LoggerAllocator, out_key: *i64, out_logger: *Struct.Logger) bool {
+        if (self.map.count() == 0) return false;
+        var maxKey: i64 = 0;
+        var it = self.map.keyIterator();
+        while (it.next()) |k| {
+            if (k.* > maxKey) maxKey = k.*;
         }
-
-        pub fn _nextId(self: *Self) i64 {
-            const id = self.next_id;
-            self.next_id += 1;
-            return id;
+        if (self.map.get(maxKey)) |logger| {
+            out_key.* = maxKey;
+            out_logger.* = logger;
+            return true;
         }
+        return false;
+    }
 
-        pub fn createId(self: Self) [3]u8 {
-            return util.toZeroPad3(self.next_id);
-        }
+    /// Retrieve a logger by its numeric key.
+    pub fn get(self: *LoggerAllocator, key: i64) ?Struct.Logger {
+        return self.map.get(key);
+    }
 
-        pub fn getLogger(self: Self, id: i64) ?Logger {
-            return self.map.get(id);
-        }
+    /// Expose the entire map (read-only copy).
+    pub fn all(self: *LoggerAllocator) std.AutoHashMap(i64, Struct.Logger) {
+        return self.map;
+    }
+};
 
-        pub fn setLogger(
-            self: Self,
-            id: [3]u8,
-            message: []const u8,
-            level: LogLevel,
-        ) Logger {
-            // メッセージ領域をアロケータから確保してコピー
-            const buf = self.allocator.alloc(u8, message.len) catch unreachable;
-            std.mem.copyForwards(u8, buf, message);
-            return Logger{
-                .id = id,
-                .entry = LogEntry{
-                    .message = buf,
-                    .level = level,
-                },
-            };
-        }
+var globalAlloc: ?*LoggerAllocator = null;
 
-        pub fn getMaxKey(self: Self) i64 {
-            if (self.map.count() == 0) return 0;
-            var max_key: i64 = 0;
-            var it = self.map.keyIterator();
-            while (it.next()) |k| {
-                if (k.* > max_key) {
-                    max_key = k.*;
-                }
-            }
-            return max_key;
-        }
-
-        pub fn getLastLogger(self: Self) ?Logger {
-            const max_key = self.getMaxKey();
-            if (max_key == 0) return null;
-            return self.getLogger(max_key);
-        }
-
-        pub fn getMap(self: Self) std.AutoHashMap(i64, Logger) {
-            return self.map;
-        }
-
-        pub fn setMap(self: *Self, logger: Logger) void {
-            self.map.put(self._nextId(), logger) catch unreachable;
-        }
-    };
-}
-
-// TODO これを export 関数にする
-// logger.info("Hello, World!", True);
-// 第二引数が True のやつを検知して発火するようにする
-// 内部で allocator を作成し、いつでも取り出せるようにする
-var global_logger_allocator: ?*LoggerAllocatorType = null;
-const LoggerAllocatorType = LoggerAllocator();
+/// Initialize the global logger allocator on first use.
 pub export fn init() void {
-    if (global_logger_allocator == null) {
-        // 1) 生のポインタを確保して…
-        const ptr = std.heap.page_allocator.create(LoggerAllocatorType) catch unreachable;
-        // 2) ptr が非 null であることが保証された上でデリファレンスして初期化
-        ptr.* = LoggerAllocatorType.init(std.heap.page_allocator);
-        // 3) global_logger_allocator に格納
-        global_logger_allocator = ptr;
+    if (globalAlloc == null) {
+        const ptr = std.heap.page_allocator.create(LoggerAllocator) catch unreachable;
+        ptr.* = LoggerAllocator.init(std.heap.page_allocator);
+        globalAlloc = ptr;
     }
 }
 
+/// Python-callable auto-logging function.
 pub export fn auto(
-    // id: [*]u8,
     message: [*:0]const u8,
-    level: LogLevel,
+    level: Struct.LogLevel,
 ) void {
-    if (global_logger_allocator) |allocator_ptr| {
-        // var id_fixed: [3]u8 = .{ 0, 0, 0 };
-        // @memcpy(&id_fixed, id);
-        const msg_slice = std.mem.span(message);
-        allocator_ptr.setMap(allocator_ptr.setLogger(allocator_ptr.createId(), msg_slice, level));
+    if (globalAlloc) |allocPtr| {
+        allocPtr.log(std.mem.span(message), level) catch unreachable;
     }
 }
 
-// TODO id を取得するコードも作成する
+/// Export the last logger entry back to Python.
 pub export fn getLastLogger(
-    out_key: *i64, // mapのキー
-    out_id: [*]u8, // Logger構造体のidフィールド
-    out_message: [*]u8, // メッセージ（constを外す！）
-    out_message_size: usize, // Python側で確保したバッファサイズを追加
-    out_level: *u32, // レベル
+    out_key: *i64,
+    out_id: [*]u8,
+    out_message: [*]u8,
+    out_message_size: usize,
+    out_level: *u32,
 ) bool {
-    if (global_logger_allocator) |allocator_ptr| {
-        const max_key = allocator_ptr.getMaxKey();
-        if (max_key == 0) return false;
-        if (allocator_ptr.getLogger(max_key)) |logger| {
-            out_key.* = max_key;
+    if (globalAlloc) |allocPtr| {
+        var logger: Struct.Logger = undefined;
+        if (allocPtr.getLast(out_key, &logger)) {
             @memcpy(out_id, &logger.id);
-            const msg_len = logger.entry.message.len;
-            const copy_len = if (msg_len < out_message_size - 1) msg_len else out_message_size - 1;
-            var i: usize = 0;
-            while (i < copy_len) : (i += 1) {
-                out_message[i] = logger.entry.message[i];
-            }
-            out_message[copy_len] = 0; // null-terminate
+
+            const msg = logger.entry.message;
+            const copy_len = if (msg.len < out_message_size - 1) msg.len else out_message_size - 1;
+            std.mem.copyForwards(u8, out_message[0..copy_len], msg[0..copy_len]);
+            out_message[copy_len] = 0; // null terminate
+
             out_level.* = @intFromEnum(logger.entry.level);
             return true;
         }
@@ -141,23 +111,22 @@ pub export fn getLastLogger(
     return false;
 }
 
-// 実行： zig run src/core.zig
+/// Example standalone runner.
+/// zig run src/core.zig
 pub fn main() !void {
-    // インスタンスを作ってから呼び出す
     const allocator = std.heap.page_allocator;
-    var logger_allocator = LoggerAllocator().init(allocator);
-    // 例として、ログを追加
-    // const AllocType = LoggerAllocator();
-    logger_allocator.setMap(logger_allocator.setLogger(logger_allocator.createId(), "Hello, World!", LogLevel.Info));
-    logger_allocator.setMap(logger_allocator.setLogger(logger_allocator.createId(), "Hello, World222!", LogLevel.Error));
-    const get_logger = logger_allocator.getLastLogger();
-    if (get_logger) |logger| {
-        std.debug.print("Logger ID: {s}, Message: {s}, Level: {}\n", .{
-            logger.id,
-            logger.entry.message,
-            @intFromEnum(logger.entry.level),
+    var logAlloc = LoggerAllocator.init(allocator);
+
+    try logAlloc.log("Hello, World!", Struct.LogLevel.Info);
+    try logAlloc.log("Error occurred", Struct.LogLevel.Error);
+
+    var out_key: i64 = 0;
+    var out_logger: Struct.Logger = undefined;
+    if (logAlloc.getLast(&out_key, &out_logger)) {
+        std.debug.print("key: {s}, message: {s}, level {d}\n", .{
+            util.toZeroPad3(out_key),
+            out_logger.entry.message,
+            @intFromEnum(out_logger.entry.level),
         });
-    } else {
-        std.debug.print("No logger found.\n", .{});
     }
 }
