@@ -1,51 +1,12 @@
 const std = @import("std");
+const Struct = @import("struct.zig");
+
+const LogLevel = Struct.LogLevel;
+const LogEntry = Struct.LogEntry;
+const Logger = Struct.Logger;
 
 const Allocator = std.mem.Allocator;
 const LEVELS = [_][]const u8{ "debug", "info", "warning", "error", "critical" };
-
-const LogLevel = enum {
-    Debug,
-    Info,
-    Warning,
-    Error,
-    Critical,
-};
-
-const LogEntry = struct {
-    /// The message is the log message.
-    /// `logger.debug("debug message")` will be stored as `debug message`.
-    /// `logger.info("info message")` will be stored as `info message`.
-    /// `logger.warning("warning message")` will be stored as `warning message`.
-    /// `logger.error("error message")` will be stored as `error message`.
-    /// `logger.critical("critical message")` will be stored as `critical message`.
-    message: []const u8,
-    /// The level is the log level.
-    /// `logger.debug("debug message")` will be stored as `LogLevel.Debug`.
-    /// `logger.info("info message")` will be stored as `LogLevel.Info`.
-    /// `logger.warning("warning message")` will be stored as `LogLevel.Warning`.
-    /// `logger.error("error message")` will be stored as `LogLevel.Error`.
-    /// `logger.critical("critical message")` will be stored as `LogLevel.Critical`.
-    level: LogLevel,
-};
-
-const Logger = struct {
-    /// Currently, three zeros are added to the end of numbers.
-    /// It is necessary to allow users to configure this setting.
-    id: [3]u8 = 0,
-    entry: LogEntry,
-};
-
-const LoggerAllocator = struct {
-    pub fn create(id: [3]u8, message: []const u8, level: LogLevel) Logger {
-        return Logger{
-            .id = id,
-            .entry = LogEntry{
-                .message = message,
-                .level = level,
-            },
-        };
-    }
-};
 
 pub fn Json() type {
     return struct {
@@ -58,11 +19,11 @@ pub fn Json() type {
             return Self{ .allocator = allocator, .logs = logs };
         }
 
-        pub fn writeBody(list: *std.ArrayList(u8), id_buf: *const [3]u8, level_str: []const u8, message: []const u8) !void {
-            try list.writer().print("    \"{s}\": {{\n      \"level\": \"{s}\",\n      \"message\": \"{s}\"\n    }}", .{ id_buf, level_str, message });
-        }
+        // pub fn writeBody(list: *std.ArrayList(u8), id_buf: *const [3]u8, level_str: []const u8, message: []const u8) !void {
+        //     try list.writer().print("    \"{s}\": {{\n      \"level\": \"{s}\",\n      \"message\": \"{s}\"\n    }}", .{ id_buf, level_str, message });
+        // }
 
-        pub fn logsToJson(self: Self, root_id: []const u8) ![]u8 {
+        pub fn toJson(self: Self, root_id: []const u8, is_lambda: bool) ![]u8 {
             if (self.logs.len == 0) {
                 var list = std.ArrayList(u8).init(self.allocator);
                 defer list.deinit();
@@ -77,15 +38,17 @@ pub fn Json() type {
             var id_num: u16 = 1;
             var first = true;
             for (self.logs) |log| {
-                if (!first) {
-                    try list.appendSlice(",\n");
-                }
+                if (!first) try list.appendSlice(",\n");
                 first = false;
                 var id_buf: [3]u8 = undefined;
                 _ = std.fmt.bufPrint(&id_buf, "{d:0>3}", .{id_num}) catch unreachable;
                 id_num += 1;
                 const level_str = logLevelToString(log.level);
-                try Self.writeBody(&list, &id_buf, level_str, log.message);
+                if (is_lambda) {
+                    try list.writer().print("    \"{s}\": \"{s}\"", .{ log.message, &id_buf });
+                } else {
+                    try list.writer().print("    \"{s}\": {{\n      \"level\": \"{s}\",\n      \"message\": \"{s}\"\n    }}", .{ &id_buf, level_str, log.message });
+                }
             }
             try list.appendSlice("\n  }\n}");
             return list.toOwnedSlice();
@@ -168,6 +131,7 @@ pub fn LoggerZig() type {
         pyfile_len: usize,
         root_id: []const u8,
         output_path: []const u8,
+        is_lambda: bool,
 
         const Self = @This();
         const allocator = std.heap.page_allocator;
@@ -192,7 +156,7 @@ pub fn LoggerZig() type {
             }
             defer logs.deinit();
             var json_instance = Json().init(Self.allocator, logs.items);
-            const json = json_instance.logsToJson(self.root_id) catch return;
+            const json = json_instance.toJson(self.root_id, self.is_lambda) catch return;
             defer Self.allocator.free(json);
             var out_file = self.createPile() catch return;
             defer out_file.close();
@@ -201,12 +165,21 @@ pub fn LoggerZig() type {
     };
 }
 
-pub export fn loggerZig(pyfile_ptr: [*]const u8, pyfile_len: usize, root_id_ptr: [*]const u8, root_id_len: usize, output_path_ptr: [*]const u8, output_path_len: usize) void {
+pub export fn loggerZig(
+    pyfile_ptr: [*]const u8,
+    pyfile_len: usize,
+    root_id_ptr: [*]const u8,
+    root_id_len: usize,
+    output_path_ptr: [*]const u8,
+    output_path_len: usize,
+    is_lambda: bool,
+) void {
     const logger = LoggerZig(){
         .pyfile_ptr = pyfile_ptr,
         .pyfile_len = pyfile_len,
         .root_id = root_id_ptr[0..root_id_len],
         .output_path = output_path_ptr[0..output_path_len],
+        .is_lambda = is_lambda,
     };
     logger.run();
 }
