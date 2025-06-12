@@ -19,10 +19,6 @@ pub fn Json() type {
             return Self{ .allocator = allocator, .logs = logs };
         }
 
-        // pub fn writeBody(list: *std.ArrayList(u8), id_buf: *const [3]u8, level_str: []const u8, message: []const u8) !void {
-        //     try list.writer().print("    \"{s}\": {{\n      \"level\": \"{s}\",\n      \"message\": \"{s}\"\n    }}", .{ id_buf, level_str, message });
-        // }
-
         pub fn toJson(self: Self, root_id: []const u8, is_lambda: bool) ![]u8 {
             if (self.logs.len == 0) {
                 var list = std.ArrayList(u8).init(self.allocator);
