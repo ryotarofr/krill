@@ -4,5 +4,5 @@ pub fn main() !void {
     const root_id = "SKIC05008E004";
     const output_path = "logger_output.json";
     const is_lambda = false;
-    json.loggerZig(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, is_lambda);
+    json.tojson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, is_lambda);
 }
