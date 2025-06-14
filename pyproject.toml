@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "krill"
+version = "0.0.1"
+description = "Python logging library that works with JSON"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [ { name="ryotarofr", email="ryoryo.fr0608@gmail.com" } ]
+dependencies = []
+keywords = ["krill", "logging", "logger", "log"]
+
+[tool.setuptools.packages.find]
+where = ["krill"]
+
+[tool.setuptools.package-data]
+krill = ["dist/liblogger.*"]
