@@ -11,6 +11,6 @@ def get_liblogger_path():
         ext = ".dll"
     else:
         raise RuntimeError(f"Unsupported platform: {sys.platform}")
-    # Use importlib.resources to find the library file in the krill/lib package
-    with importlib.resources.path("krill/lib", f"liblogger{ext}") as p:
+    # Use importlib.resources to find the library file in the c_krill.lib package
+    with importlib.resources.path("c_krill.lib", f"liblogger{ext}") as p:
         return str(p)

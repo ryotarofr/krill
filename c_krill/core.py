@@ -1,8 +1,7 @@
 import logging
 from typing import Optional
 import ctypes
-
-import util
+from . import util
 
 class KrillCore:
     """

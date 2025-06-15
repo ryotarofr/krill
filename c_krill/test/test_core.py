@@ -3,7 +3,7 @@ import logging
 import tempfile
 import shutil
 
-from krill.code import setup_logger
+from c_krill.core import setup_logger
 
 def test_krill_logger():
     root_id = "API_ROOT_ID"

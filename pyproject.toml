@@ -1,19 +1,26 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling==1.22.0", "hatch-vcs==0.5.0"]
+build-backend = "hatchling.build"
 
 [project]
-name = "krill"
-version = "0.0.1"
+name        = "c_krill"
+version     = "0.0.10"
 description = "Python logging library that works with JSON"
-readme = "README.md"
-license = { file = "LICENSE" }
-authors = [ { name="ryotarofr", email="ryoryo.fr0608@gmail.com" } ]
+readme      = { file = "README.md", content-type = "text/markdown" }
+license = "MIT"
+authors     = [{ name = "ryotarofr", email = "ryoryo.fr0608@gmail.com" }]
 dependencies = []
-keywords = ["krill", "logging", "logger", "log"]
+keywords    = ["c_krill", "logging", "logger", "log"]
+requires-python = ">=3.4"
 
-[tool.setuptools.packages.find]
-where = ["krill"]
+[tool.hatch.build.targets.sdist]
+include = [
+  "c_krill/**",
+]
 
-[tool.setuptools.package-data]
-krill = ["dist/liblogger.*"]
+[tool.hatch.build.targets.wheel]
+packages  = ["c_krill"]
+artifacts = ["c_krill/lib/liblogger.*"]
+
+[tool.setuptools]
+license-files = ["LICENSE"]

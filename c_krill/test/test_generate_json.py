@@ -1,7 +1,7 @@
 import os
+from generate_json import generate_json
 
 def test_generate_json_creates_file():
-    from generate_json import generate_json
 
     pyfile = "core/test/logger.py"
     root_id = "API_ROOT_ID"
