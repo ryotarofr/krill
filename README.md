@@ -107,7 +107,7 @@ KrillCore(json_path: str, key: str, subkey: str)
 class KrillLogger(logging.Logger)
 ```
 
-`logging.Logger` のサブクラスで、`KrillCore` と統合され、各ログ呼び出し時にサブキー識別子をオプションで記録。
+`logging.Logger` のサブクラスで、`KrillCore` と統合され、各ログ呼び出し時にサブキー識別子をオプションで記録します。
 
 **属性**
 
