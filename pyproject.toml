@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name        = "c_krill"
-version     = "0.0.8"
+version     = "0.0.10"
 description = "Python logging library that works with JSON"
 readme      = { file = "README.md", content-type = "text/markdown" }
 license = "MIT"
