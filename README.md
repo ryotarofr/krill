@@ -1,12 +1,84 @@
 # krill
 
-## API Reference
+`krill` はプランクトンの一種です。PYPI にすでに `krill` というパッケージが存在していたため、`c_krill` という名前にしました。
 
-This module provides a ctypes-based interface to a Zig-made shared library for JSON‑based key→subkey lookups, and a custom `logging.Logger` subclass that records identifiers retrieved from that library.
+このパッケージには 2 つの機能があります。
 
----
+1. ログの生成
+2. ログを検索
 
-## Classes
+## インストール
+
+```bash
+pip3 install c_krill
+```
+
+## 使い方
+
+以下にサンプルコードを記載します。
+
+```py
+# 1. ログの生成
+from c_krill import generate_json
+
+pyfile = "logger.py"
+root_id = "API_ROOT_ID"
+output_path = "logger_output.json"
+env_identifier = True
+generate_json(str(pyfile), root_id, str(output_path), env_identifier)
+
+output_path = "logger_output2.json"
+env_identifier = False
+generate_json(str(pyfile), root_id, str(output_path), env_identifier)
+```
+
+```py
+# 2. ログを検索
+import logging
+
+from c_krill import KrillCore, KrillLogger
+
+def setup_logger(name: str, json_path: str, level: int = logging.INFO) -> logging.Logger:
+    logging.setLoggerClass(KrillLogger)
+
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(level)
+    formatter = logging.Formatter('%(asctime)s [%(name)s][%(levelname)s] %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    logger._krill = KrillCore(
+        json_path=json_path,
+        key=name,
+        subkey=""
+    )
+
+    return logger
+
+
+if __name__ == "__main__":
+    API_NAME  = 'API_ROOT_ID'
+    JSON_PATH = 'logger_output.json'
+
+    logger = setup_logger(API_NAME, JSON_PATH)
+
+    logger.info("hello", identifier=True)
+    logger.debug("debug message", identifier=True)
+    logger.warning("warning message", identifier=True)
+    logger.error("error message", identifier=True)
+    logger.critical("critical message", identifier=True)
+
+    print("list :", logger.getSubKeyList())
+    print("last :", logger.getLastSubkey())
+
+```
+
+## API リファレンス
+
+パッケージの中身は、Zig で作成された JSON ベースのキー → サブキー検索用の共有ライブラリに対して ctypes ベースのインターフェースを提供し、そのライブラリから取得した識別子を記録するカスタム`logging.Logger`サブクラスを含みます。
 
 ### `KrillCore`
 
@@ -14,36 +86,20 @@ This module provides a ctypes-based interface to a Zig-made shared library for J
 KrillCore(json_path: str, key: str, subkey: str)
 ```
 
-**Description**
-Calls into the Zig-based shared library via `ctypes` to perform lookups from a JSON file. Maintains internal state for `key` and `subkey`.
+`ctypes`経由で呼び出しを行い、JSON ファイルから検索を実行します。`key`と`subkey`の内部状態を保持します。
 
-**Parameters**
+**パラメータ**
 
-- `json_path` (`str`): Path to the JSON file containing nested key→subkey mappings.
-- `key` (`str`): Primary lookup key.
-- `subkey` (`str`): Secondary lookup key.
+- `json_path` (`str`): ネストされたキー → サブキーのマッピングを含む JSON ファイルへのパス.
+- `key` (`str`): プライマリ key.
+- `subkey` (`str`): セカンダリ lookup key.
 
-**Attributes**
+**属性**
 
 - `json_path` (`str`)
 - `key` (`str`)
 - `subkey` (`str`)
-- `buf_size` (`int`): Size of the output buffer (default: `256`).
-
-#### Methods
-
-- `setSubkey(subkey: str) -> None`
-
-  - Set the secondary lookup key for subsequent calls.
-
-- `_bytes_from_string(s: str) -> bytes`
-
-  - Encode a Python string to UTF‑8 bytes.
-
-- `find() -> Optional[str]`
-  - Perform the lookup in the shared library and return the matching string (or `None` if not found).
-
----
+- `buf_size` (`int`): default: `256`.
 
 ### `KrillLogger`
 
@@ -51,95 +107,9 @@ Calls into the Zig-based shared library via `ctypes` to perform lookups from a J
 class KrillLogger(logging.Logger)
 ```
 
-**Description**
-A `logging.Logger` subclass that integrates with `KrillCore` to optionally record subkey identifiers on each log call.
+`logging.Logger` のサブクラスで、`KrillCore` と統合され、各ログ呼び出し時にサブキー識別子をオプションで記録。
 
-**Attributes**
+**属性**
 
-- `_krill` (`Optional[KrillCore]`): Attached `KrillCore` instance (set by `setup_logger`).
-- `alloc_id_list` (`list[Optional[str]]`): History of identifiers retrieved from `KrillCore`.
-
-#### Methods
-
-- `getSubKeyList() -> list[Optional[str]]`
-
-  - Return the full list of recorded subkey identifiers.
-
-- `getLastSubkey() -> Optional[str]`
-
-  - Return the most recently recorded subkey identifier (or `None`).
-
-- `debug(msg, identifier: bool=False, *args, **kwargs)`
-- `info(msg, identifier: bool=False, *args, **kwargs)`
-- `warning(msg, identifier: bool=False, *args, **kwargs)`
-- `error(msg, identifier: bool=False, *args, **kwargs)`
-- `critical(msg, identifier: bool=False, *args, **kwargs)`
-
-  Each logging method accepts an extra `identifier` flag. If `True` and a `KrillCore` instance is attached, it will:
-
-  1. Call `KrillCore.setSubkey(msg)` with the log message.
-  2. Call `KrillCore.find()` and append the result to `alloc_id_list`.
-
----
-
-## Functions
-
-### `setup_logger`
-
-```python
-def setup_logger(
-    name: str,
-    json_path: str,
-    level: int = logging.INFO
-) -> KrillLogger:
-```
-
-**Description**
-Configure the root logging system to use `KrillLogger`, attach a `KrillCore` instance, and return the configured logger.
-
-**Parameters**
-
-- `name` (`str`): Logger name (also used as the primary key for lookups).
-- `json_path` (`str`): Path to the JSON file for `KrillCore`.
-- `level` (`int`, optional): Logging level (default: `logging.INFO`).
-
-**Returns**
-
-- `KrillLogger`: Configured logger with a `StreamHandler` and attached `KrillCore`.
-
----
-
-## Sample Usage
-
-```python
-import logging
-from krill import KrillCore, KrillLogger, setup_logger
-
-API_NAME  = 'API_ROOT_ID'
-JSON_PATH = 'logger_output.json'
-
-# Initialize the logger
-logger = setup_logger(
-    name=API_NAME,
-    json_path=JSON_PATH,
-    level=logging.DEBUG
-)
-
-# Log messages with subkey tracking enabled
-logger.info("hello", identifier=True)
-logger.debug("debug message", identifier=True)
-logger.warning("warning message", identifier=True)
-logger.error("error message", identifier=True)
-logger.critical("critical message", identifier=True)
-
-# Inspect recorded identifiers
-print("SubKey List:", logger.getSubKeyList())
-print("Last SubKey:", logger.getLastSubkey())
-```
-
-- **Step-by-step**
-  1. Call `setup_logger()` to create a `KrillLogger` with attached `KrillCore`.
-  2. Pass `identifier=True` to any log call to record the JSON lookup result for the message.
-  3. Use `getSubKeyList()` or `getLastSubkey()` to retrieve identifiers collected so far.
-
----
+- `_krill` (`Optional[KrillCore]`): `KrillCore` インスタンス内で（`setup_logger` を設定 → アプリケーション側で任意設定）。
+- `alloc_id_list` (`list[Optional[str]]`): `KrillCore`から取得した識別子のアロケータ。
