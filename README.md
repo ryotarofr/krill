@@ -10,7 +10,7 @@
 ## インストール
 
 ```bash
-pip3 install c_krill
+pip install c_krill
 ```
 
 ## 使い方
