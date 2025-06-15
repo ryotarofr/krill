@@ -1,0 +1,9 @@
+{
+  "API_ROOT_ID": {
+    "debug message": "001",
+    "info message": "002",
+    "warning message": "003",
+    "error message": "004",
+    "critical message": "005"
+  }
+}

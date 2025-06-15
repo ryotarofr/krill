@@ -1,6 +1,6 @@
 import logging
 
-from krill import KrillCore, KrillLogger
+from c_krill import KrillCore, KrillLogger
 
 def setup_logger(name: str, json_path: str, level: int = logging.INFO) -> logging.Logger:
     logging.setLoggerClass(KrillLogger)

@@ -1,0 +1,9 @@
+LICENSE
+README.md
+pyproject.toml
+krill/krill.egg-info/PKG-INFO
+krill/krill.egg-info/SOURCES.txt
+krill/krill.egg-info/dependency_links.txt
+krill/krill.egg-info/top_level.txt
+krill/test/test_core.py
+krill/test/test_generate_json.py
