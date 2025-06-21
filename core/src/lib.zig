@@ -93,8 +93,7 @@ pub export fn toJson(
     /// The prefix for the logger, e.g., "logger"
     prefix: [*]const u8,
     prefix_len: usize,
-    /// The target log level, e.g., [0, 1, 2, etc].
-    /// 0 -> "debug", 1 -> "info", 2 -> "warning", etc.
+    /// The target log level, e.g., ["debug", "info", "warning", etc.].
     target_loglevel: [*]const [*]const u8,
     target_loglevel_len: usize,
     /// Whether the logger is running in a Lambda environment

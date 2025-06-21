@@ -40,7 +40,7 @@ const LogExtractor = struct {
     /// Normally, this will be a string such as `logger` or `logging`.
     prefix: []const u8,
     /// Target log levels to extract.
-    /// This is a list of strings such as `[0, 1, 2, ...]`.
+    /// This is a list of strings such as `["debug", "info", ...]`.
     target_loglevel: []const [*]const u8,
 
     const Self = @This();
