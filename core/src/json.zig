@@ -21,6 +21,15 @@ fn logLevelPrefix(prefix: []const u8, level: LogLevel, allocator: Allocator) ![]
     return std.fmt.allocPrint(allocator, "{s}.{s}(\"", .{ prefix, logLevelToString(level) });
 }
 
+/// take a null-terminated [*]const u8 and return a []const u8 slice.
+fn cStrSlice(cstr: [*]const u8) []const u8 {
+    var len: usize = 0;
+    // count until NUL
+    while (cstr[len] != 0) : (len += 1) {}
+    // now build a slice of that length
+    return cstr[0..len];
+}
+
 const LogExtractor = struct {
     /// Path to the Python file.
     /// If a directory is specified, recursively search for python files within it.
@@ -30,8 +39,24 @@ const LogExtractor = struct {
     /// Any string specified by the application side.
     /// Normally, this will be a string such as `logger` or `logging`.
     prefix: []const u8,
+    /// Target log levels to extract.
+    /// This is a list of strings such as `[0, 1, 2, ...]`.
+    target_loglevel: []const [*]const u8,
 
     const Self = @This();
+
+    /// If `target_loglevel` is empty, extract all log levels.
+    /// Extract only log levels that match the log level strings specified in `target_loglevel`.
+    /// Example: If `target_loglevel` is `[“debug”, “info”]`, extract only logs with the log levels ‘debug’ and “info”.
+    fn filterLog(self: *const LogExtractor, level_str: []const u8) bool {
+        if (self.target_loglevel.len == 0) return true;
+
+        for (self.target_loglevel) |target| {
+            const ts = cStrSlice(target);
+            if (std.mem.eql(u8, level_str, ts)) return true;
+        }
+        return false;
+    }
 
     fn extract(self: Self) !std.ArrayList(LogEntry) {
         const source = try util.readJsonFile(self.allocator, self.pyfile);
@@ -43,15 +68,20 @@ const LogExtractor = struct {
             const info = @typeInfo(LogLevel);
             inline for (info.@"enum".fields) |field| {
                 const level: LogLevel = @enumFromInt(field.value);
-                const prefix = try logLevelPrefix(self.prefix, level, self.allocator);
-                defer self.allocator.free(prefix);
+                const level_str = logLevelToString(level);
 
-                if (std.mem.indexOf(u8, trimmed, prefix)) |start| {
-                    const msg_start = start + prefix.len;
-                    if (std.mem.indexOfScalar(u8, trimmed[msg_start..], '"')) |msg_end| {
-                        const msg = trimmed[msg_start .. msg_start + msg_end];
-                        try logs.append(.{ .level = level, .message = msg });
-                        break;
+                // wrap the body in a runtime‐guard instead of compile‐time continue
+                if (self.filterLog(level_str)) {
+                    const prefix = try logLevelPrefix(self.prefix, level, self.allocator);
+                    defer self.allocator.free(prefix);
+
+                    if (std.mem.indexOf(u8, trimmed, prefix)) |start| {
+                        const msg_start = start + prefix.len;
+                        if (std.mem.indexOfScalar(u8, trimmed[msg_start..], '"')) |msg_end| {
+                            const msg = trimmed[msg_start .. msg_start + msg_end];
+                            try logs.append(.{ .level = level, .message = msg });
+                            break;
+                        }
                     }
                 }
             }
@@ -100,6 +130,7 @@ pub const LoggerRunner = struct {
     root_id: []const u8,
     output_path: []const u8,
     prefix: []const u8,
+    target_loglevel: []const [*]const u8,
     is_lambda: bool,
 
     const Self = @This();
@@ -110,6 +141,7 @@ pub const LoggerRunner = struct {
             .pyfile = self.pyfile,
             .allocator = allocator,
             .prefix = self.prefix,
+            .target_loglevel = self.target_loglevel,
         };
 
         var logs = extractor.extract() catch return;
