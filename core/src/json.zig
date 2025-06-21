@@ -17,13 +17,19 @@ fn logLevelToString(level: LogLevel) []const u8 {
     };
 }
 
-fn logLevelPrefix(level: LogLevel, allocator: Allocator) ![]u8 {
-    return std.fmt.allocPrint(allocator, "logger.{s}(\"", .{logLevelToString(level)});
+fn logLevelPrefix(prefix: []const u8, level: LogLevel, allocator: Allocator) ![]u8 {
+    return std.fmt.allocPrint(allocator, "{s}.{s}(\"", .{ prefix, logLevelToString(level) });
 }
 
 const LogExtractor = struct {
-    pyfile: []const u8,
+    /// Path to the Python file.
+    /// If a directory is specified, recursively search for python files within it.
+    pyfile: []const u8, // TODO これは comtime T でよいのでは？ ディレクトリ指定の場合は、除外するファイル群の指定をするパラメータを付与
+    /// Temporary memory allocation for dynamic data
     allocator: Allocator,
+    /// Any string specified by the application side.
+    /// Normally, this will be a string such as `logger` or `logging`.
+    prefix: []const u8,
 
     const Self = @This();
 
@@ -37,7 +43,7 @@ const LogExtractor = struct {
             const info = @typeInfo(LogLevel);
             inline for (info.@"enum".fields) |field| {
                 const level: LogLevel = @enumFromInt(field.value);
-                const prefix = try logLevelPrefix(level, self.allocator);
+                const prefix = try logLevelPrefix(self.prefix, level, self.allocator);
                 defer self.allocator.free(prefix);
 
                 if (std.mem.indexOf(u8, trimmed, prefix)) |start| {
@@ -93,6 +99,7 @@ pub const LoggerRunner = struct {
     pyfile: []const u8,
     root_id: []const u8,
     output_path: []const u8,
+    prefix: []const u8,
     is_lambda: bool,
 
     const Self = @This();
@@ -102,6 +109,7 @@ pub const LoggerRunner = struct {
         var extractor = LogExtractor{
             .pyfile = self.pyfile,
             .allocator = allocator,
+            .prefix = self.prefix,
         };
 
         var logs = extractor.extract() catch return;

@@ -72,6 +72,8 @@ pub export fn toJson(
     root_id_len: usize,
     output_path_ptr: [*]const u8,
     output_path_len: usize,
+    prefix: [*]const u8,
+    prefix_len: usize,
     /// Whether the logger is running in a Lambda environment
     env_identifier: bool,
 ) void {
@@ -79,6 +81,7 @@ pub export fn toJson(
         .pyfile = pyfile_ptr[0..pyfile_len],
         .root_id = root_id_ptr[0..root_id_len],
         .output_path = output_path_ptr[0..output_path_len],
+        .prefix = prefix[0..prefix_len],
         .is_lambda = env_identifier,
     };
     runner.run();
@@ -88,8 +91,9 @@ test "toJson generates logger_output.json" {
     const pyfile = "./test/logger.py";
     const root_id = "API_ROOT_ID";
     const output_path = "./dist/logger_output.json";
+    const prefix = "logger";
     const env_identifier = true;
-    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, env_identifier);
+    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, env_identifier);
     const allocator = std.testing.allocator;
     const file = try std.fs.cwd().openFile(output_path, .{});
     defer file.close();
@@ -102,8 +106,9 @@ test "toJson generates logger_output2.json" {
     const pyfile = "./test/logger.py";
     const root_id = "API_ROOT_ID";
     const output_path = "./dist/logger_output2.json";
+    const prefix = "logger";
     const env_identifier = false;
-    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, env_identifier);
+    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, env_identifier);
     const allocator = std.testing.allocator;
     const file = try std.fs.cwd().openFile(output_path, .{});
     defer file.close();
