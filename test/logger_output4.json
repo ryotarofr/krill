@@ -1,0 +1,12 @@
+{
+  "API_ROOT_ID": {
+    "001": {
+      "level": "debug",
+      "message": "debug message"
+    },
+    "002": {
+      "level": "info",
+      "message": "info message"
+    }
+  }
+}
