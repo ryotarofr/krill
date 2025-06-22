@@ -16,12 +16,12 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     logger.addHandler(ch)
     
     return logger
+  
+CKRILL_API_KEY = "API_ROOT_ID_2"
 
-CKRILL_API_KEY = "API_ROOT_ID"
-
-logger = setup_logger('my_logger')
-logger.debug("debug message")
-logger.info("info message")
-logger.warning("warning message")
-logger.error("error message")
-logger.critical("critical message")
+logger = setup_logger('my_logger2')
+logger.debug("debug message2")
+logger.info("info message2")
+logger.warning("warning message2")
+logger.error("error message2")
+logger.critical("critical message2")
