@@ -1,21 +1,19 @@
 import ctypes
 from . import util
 
-def generate_json(pyfile: str, root_id: str, output_path: str, prefix: str, target_loglevel: list[str], env_identifier: bool):
+def generate_json(pyfile: str, output_path: str, prefix: str, target_loglevel: list[str], env_identifier: bool):
     lib_path = util.get_liblogger_path()
     _lib = ctypes.CDLL(lib_path)
     _lib.toJson.argtypes = [
         ctypes.c_char_p, ctypes.c_size_t,
         ctypes.c_char_p, ctypes.c_size_t,
         ctypes.c_char_p, ctypes.c_size_t,
-        ctypes.c_char_p, ctypes.c_size_t,
-        ctypes.POINTER(ctypes.c_char_p), ctypes.c_size_t,  # ←ここ
+        ctypes.POINTER(ctypes.c_char_p), ctypes.c_size_t,
         ctypes.c_bool
     ]
     _lib.toJson.restype = None
 
     pyfile = _bytes_from_string(pyfile)
-    root_id = _bytes_from_string(root_id)
     output_path = _bytes_from_string(output_path)
     prefix = _bytes_from_string(prefix)
     target_loglevel = [_bytes_from_string(s) for s in target_loglevel]
@@ -24,7 +22,6 @@ def generate_json(pyfile: str, root_id: str, output_path: str, prefix: str, targ
 
     _lib.toJson(
         pyfile, len(pyfile),
-        root_id, len(root_id),
         output_path, len(output_path),
         prefix, len(prefix),
         target_loglevel_c, len(target_loglevel),

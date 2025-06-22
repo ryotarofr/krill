@@ -23,10 +23,10 @@ def setup_logger(name: str, json_path: str, level: int = logging.INFO) -> loggin
     return logger
 
 def test_krill_logger():
-    root_id = "API_ROOT_ID"
+    CKRILL_API_KEY = "API_ROOT_ID" # nesesary for KrillCore
     json_path = "test/logger_output.json"
 
-    logger = setup_logger(root_id, str(json_path))
+    logger = setup_logger(CKRILL_API_KEY, str(json_path))
 
     logger.info("info message", identifier=True)
     logger.debug("debug message", identifier=True)

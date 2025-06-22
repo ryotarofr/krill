@@ -68,13 +68,11 @@ test "find_json_value returns correct value" {
 
     const found = find(json_bytes.ptr, json_bytes.len, key.ptr, key.len, subkey.ptr, subkey.len, &out_buf, out_buf.len);
 
-    if (!found) try std.testing.expect(false);
+    try std.testing.expect(found);
 
     if (found) {
         const result = out_buf[0..std.mem.indexOfScalar(u8, &out_buf, 0).?];
         try std.testing.expectEqualStrings("001", result);
-    } else {
-        try std.testing.expect(false);
     }
 }
 
@@ -83,9 +81,6 @@ pub export fn toJson(
     /// e.g., "./test/logger.py"
     pyfile_ptr: [*]const u8,
     pyfile_len: usize,
-    /// The root ID for the logger, e.g., "API_ROOT_ID"
-    root_id_ptr: [*]const u8,
-    root_id_len: usize,
     /// The path where the output JSON file will be saved
     /// e.g., "./dist/logger_output.json"
     output_path_ptr: [*]const u8,
@@ -101,7 +96,6 @@ pub export fn toJson(
 ) void {
     const runner = Json.LoggerRunner{
         .pyfile = pyfile_ptr[0..pyfile_len],
-        .root_id = root_id_ptr[0..root_id_len],
         .output_path = output_path_ptr[0..output_path_len],
         .prefix = prefix[0..prefix_len],
         .target_loglevel = target_loglevel[0..target_loglevel_len],
@@ -112,7 +106,6 @@ pub export fn toJson(
 
 test "toJson generates logger_output.json" {
     const pyfile = "./test/logger.py";
-    const root_id = "API_ROOT_ID";
     const output_path = "./dist/logger_output.json";
     const prefix = "logger";
     var target_loglevel = std.ArrayList([*]const u8).init(std.testing.allocator);
@@ -120,7 +113,7 @@ test "toJson generates logger_output.json" {
     // try target_loglevel.append("debug".ptr);
     // try target_loglevel.append("info".ptr);
     const env_identifier = true;
-    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
+    toJson(pyfile.ptr, pyfile.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
     const allocator = std.testing.allocator;
     const file = try std.fs.cwd().openFile(output_path, .{});
     defer file.close();
@@ -131,7 +124,6 @@ test "toJson generates logger_output.json" {
 
 test "toJson generates logger_output2.json" {
     const pyfile = "./test/logger.py";
-    const root_id = "API_ROOT_ID";
     const output_path = "./dist/logger_output2.json";
     const prefix = "logger";
     var target_loglevel = std.ArrayList([*]const u8).init(std.testing.allocator);
@@ -139,7 +131,7 @@ test "toJson generates logger_output2.json" {
     // try target_loglevel.append("debug".ptr);
     // try target_loglevel.append("info".ptr);
     const env_identifier = false;
-    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
+    toJson(pyfile.ptr, pyfile.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
     const allocator = std.testing.allocator;
     const file = try std.fs.cwd().openFile(output_path, .{});
     defer file.close();
@@ -150,7 +142,6 @@ test "toJson generates logger_output2.json" {
 
 test "toJson generates logger_output3.json" {
     const pyfile = "./test/logger.py";
-    const root_id = "API_ROOT_ID";
     const output_path = "./dist/logger_output3.json";
     const prefix = "logger";
     var target_loglevel = std.ArrayList([*]const u8).init(std.testing.allocator);
@@ -158,7 +149,7 @@ test "toJson generates logger_output3.json" {
     try target_loglevel.append("debug".ptr);
     try target_loglevel.append("info".ptr);
     const env_identifier = true;
-    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
+    toJson(pyfile.ptr, pyfile.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
     const allocator = std.testing.allocator;
     const file = try std.fs.cwd().openFile(output_path, .{});
     defer file.close();
@@ -169,7 +160,6 @@ test "toJson generates logger_output3.json" {
 
 test "toJson generates logger_output4.json" {
     const pyfile = "./test/logger.py";
-    const root_id = "API_ROOT_ID";
     const output_path = "./dist/logger_output4.json";
     const prefix = "logger";
     var target_loglevel = std.ArrayList([*]const u8).init(std.testing.allocator);
@@ -177,7 +167,43 @@ test "toJson generates logger_output4.json" {
     try target_loglevel.append("debug".ptr);
     try target_loglevel.append("info".ptr);
     const env_identifier = false;
-    toJson(pyfile.ptr, pyfile.len, root_id.ptr, root_id.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
+    toJson(pyfile.ptr, pyfile.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
+    const allocator = std.testing.allocator;
+    const file = try std.fs.cwd().openFile(output_path, .{});
+    defer file.close();
+    const content = try file.readToEndAlloc(allocator, 10 * 1024 * 1024);
+    defer allocator.free(content);
+    try std.testing.expect(content.len > 0);
+}
+
+test "toJson generates logger_output5.json" {
+    const pyfile = "./test";
+    const output_path = "./dist/logger_output5.json";
+    const prefix = "logger";
+    var target_loglevel = std.ArrayList([*]const u8).init(std.testing.allocator);
+    defer target_loglevel.deinit();
+    // try target_loglevel.append("debug".ptr);
+    // try target_loglevel.append("info".ptr);
+    const env_identifier = true;
+    toJson(pyfile.ptr, pyfile.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
+    const allocator = std.testing.allocator;
+    const file = try std.fs.cwd().openFile(output_path, .{});
+    defer file.close();
+    const content = try file.readToEndAlloc(allocator, 10 * 1024 * 1024);
+    defer allocator.free(content);
+    try std.testing.expect(content.len > 0);
+}
+
+test "toJson generates logger_output6.json" {
+    const pyfile = "./test";
+    const output_path = "./dist/logger_output6.json";
+    const prefix = "logger";
+    var target_loglevel = std.ArrayList([*]const u8).init(std.testing.allocator);
+    defer target_loglevel.deinit();
+    // try target_loglevel.append("debug".ptr);
+    // try target_loglevel.append("info".ptr);
+    const env_identifier = false;
+    toJson(pyfile.ptr, pyfile.len, output_path.ptr, output_path.len, prefix.ptr, prefix.len, target_loglevel.items.ptr, target_loglevel.items.len, env_identifier);
     const allocator = std.testing.allocator;
     const file = try std.fs.cwd().openFile(output_path, .{});
     defer file.close();

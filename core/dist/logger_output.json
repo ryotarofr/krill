@@ -1,24 +1,9 @@
 {
   "API_ROOT_ID": {
-    "001": {
-      "level": "debug",
-      "message": "debug message"
-    },
-    "002": {
-      "level": "info",
-      "message": "info message"
-    },
-    "003": {
-      "level": "warning",
-      "message": "warning message"
-    },
-    "004": {
-      "level": "error",
-      "message": "error message"
-    },
-    "005": {
-      "level": "critical",
-      "message": "critical message"
-    }
+    "debug message": "001",
+    "info message": "002",
+    "warning message": "003",
+    "error message": "004",
+    "critical message": "005"
   }
 }
