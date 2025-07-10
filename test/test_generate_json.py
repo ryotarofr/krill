@@ -4,7 +4,7 @@ from c_krill.generate_json import generate_json
 def test_generate_json_creates_file():
 
     pyfile = "core/test/logger.py"
-    output_path = "test/logger_output.json"
+    output_path = "logger_output.json"
     prefix = "logger"
     target_loglevel = []
     env_identifier = True
@@ -20,7 +20,7 @@ def test_generate_json_creates_file():
 def test_generate_json_creates_file2():
 
     pyfile = "core/test/logger.py"
-    output_path = "test/logger_output2.json"
+    output_path = "logger_output2.json"
     prefix = "logger"
     target_loglevel = []
     env_identifier = False
@@ -36,7 +36,7 @@ def test_generate_json_creates_file2():
 def test_generate_json_creates_file3():
 
     pyfile = "core/test/logger.py"
-    output_path = "test/logger_output3.json"
+    output_path = "logger_output3.json"
     prefix = "logger"
     target_loglevel = ["info", "debug"]
     env_identifier = True
@@ -50,7 +50,7 @@ def test_generate_json_creates_file3():
 def test_generate_json_creates_file4():
 
     pyfile = "core/test/logger.py"
-    output_path = "test/logger_output4.json"
+    output_path = "logger_output4.json"
     prefix = "logger"
     target_loglevel = ["info", "debug"]
     env_identifier = False
