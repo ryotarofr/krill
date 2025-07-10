@@ -25,7 +25,7 @@ def generate_json(pyfile: str, output_path: str, prefix: str, target_loglevel: l
         output_path, len(output_path),
         prefix, len(prefix),
         target_loglevel_c, len(target_loglevel),
-        env_identifier, env_identifier,
+        env_identifier,
     )
 
 def _bytes_from_string(s: str) -> bytes:
